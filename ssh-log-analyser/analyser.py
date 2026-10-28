@@ -1,6 +1,7 @@
 """SSH auth.log analyser: parse failed logins and flag brute-force activity."""
 import ipaddress
 import re
+from collections import Counter, defaultdict
 
 # Matches both formats:
 #   Failed password for root from 1.2.3.4 port 22 ssh2
@@ -18,8 +19,9 @@ def parse_line(line):
     match = FAILED_RE.match(line)
     if not match:
         return None
+    # Logs are untrusted input: confirm the captured text is a real IP address.
     try:
-        ipaddress.ip_address(match.group("ip"))  # reject anything that isn't an IP
+        ipaddress.ip_address(match.group("ip"))
     except ValueError:
         return None
     return match.groupdict()
@@ -27,14 +29,14 @@ def parse_line(line):
 
 def parse_file(path):
     """Yield one dict per failed login in the file."""
-    # errors="replace" stops a stray bad byte from crashing the whole run
+    # errors="replace" stops a stray bad byte from crashing the whole run.
     with open(path, encoding="utf-8", errors="replace") as f:
-        for line in f:
+        for line in f:  # reads one line at a time, so large logs are fine
             entry = parse_line(line)
             if entry:
                 yield entry
 
 
-if __name__ == "__main__":
-    for e in parse_file("sample_auth.log"):
-        print(e)
+def count_failures(entries):
+    """Return (failures_per_ip, users_per_ip) for an iterable of parsed entries."""
+    failures = Counter()
