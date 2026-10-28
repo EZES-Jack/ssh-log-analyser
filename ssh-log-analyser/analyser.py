@@ -40,3 +40,27 @@ def parse_file(path):
 def count_failures(entries):
     """Return (failures_per_ip, users_per_ip) for an iterable of parsed entries."""
     failures = Counter()
+    # defaultdict(set) creates an empty set on first use; a set keeps each
+    # username once, so len() gives the number of distinct accounts targeted.
+    users = defaultdict(set)
+
+    for entry in entries:
+        failures[entry["ip"]] += 1
+        users[entry["ip"]].add(entry["user"])
+
+    return failures, users
+
+
+def find_suspects(failures, threshold):
+    """Return [(ip, count), ...] for IPs at or above threshold, worst first."""
+    flagged = [(ip, n) for ip, n in failures.items() if n >= threshold]
+    # Sort on the count (index 1), highest first.
+    return sorted(flagged, key=lambda item: item[1], reverse=True)
+
+
+# Temporary demo; the argparse CLI replaces it in Step 4.
+# This line must start at column 0, NOT indented under the function above.
+if __name__ == "__main__":
+    failures, users = count_failures(parse_file("sample_auth.log"))
+    print(failures)
+    print(find_suspects(failures, threshold=5))
