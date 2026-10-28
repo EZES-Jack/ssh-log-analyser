@@ -1,6 +1,8 @@
 """SSH auth.log analyser: parse failed logins and flag brute-force activity."""
+import argparse
 import ipaddress
 import re
+import sys
 from collections import Counter, defaultdict
 
 # Matches both formats:
@@ -58,9 +60,63 @@ def find_suspects(failures, threshold):
     return sorted(flagged, key=lambda item: item[1], reverse=True)
 
 
-# Temporary demo; the argparse CLI replaces it in Step 4.
-# This line must start at column 0, NOT indented under the function above.
+def build_report(path, failures, users, threshold):
+    """Return the summary report as a single string."""
+    lines = [
+        "SSH failed-login report",
+        f"File: {path}",
+        f"Threshold: {threshold} failures",
+        f"Total failed logins: {sum(failures.values())}",
+        f"Unique source IPs: {len(failures)}",
+        "",
+        f"{'IP':<18}{'Failures':<10}Usernames tried",
+    ]
+    # most_common() lists IPs from most to fewest failures.
+    for ip, count in failures.most_common():
+        lines.append(f"{ip:<18}{count:<10}{len(users[ip])}")
+
+    lines.append("")
+    suspects = find_suspects(failures, threshold)
+    if suspects:
+        lines.append(f"POSSIBLE BRUTE FORCE (>= {threshold} failures):")
+        for ip, count in suspects:
+            # sorted() makes the username list stable between runs.
+            names = ", ".join(sorted(users[ip]))
+            lines.append(f"  {ip}: {count} failures, usernames: {names}")
+    else:
+        lines.append("No IPs reached the threshold.")
+    return "\n".join(lines)
+
+
+def positive_int(value):
+    """argparse type: accept only whole numbers of 1 or more."""
+    number = int(value)  # raises ValueError for text, which argparse reports
+    if number < 1:
+        raise argparse.ArgumentTypeError("threshold must be 1 or more")
+    return number
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Analyse an SSH auth.log for failed logins and brute-force activity."
+    )
+    parser.add_argument("logfile", help="path to the auth.log file to analyse")
+    parser.add_argument(
+        "-t", "--threshold", type=positive_int, default=5,
+        help="failures from one IP that trigger a flag (default: 5)",
+    )
+    args = parser.parse_args()
+
+    try:
+        failures, users = count_failures(parse_file(args.logfile))
+    except OSError as err:
+        # Covers missing file, no permission, a folder instead of a file.
+        print(f"Error: cannot read {args.logfile}: {err.strerror}", file=sys.stderr)
+        return 1
+
+    print(build_report(args.logfile, failures, users, args.threshold))
+    return 0
+
+
 if __name__ == "__main__":
-    failures, users = count_failures(parse_file("sample_auth.log"))
-    print(failures)
-    print(find_suspects(failures, threshold=5))
+    sys.exit(main())
