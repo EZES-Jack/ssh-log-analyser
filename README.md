@@ -66,4 +66,8 @@ python -m unittest -v
 
 ## What I learned
 
-- (write 3-5 points in your own words, see the prompts below)
+- **Logs are untrusted input.** The regex only proves a line has the right shape, so I validate each IP with the `ipaddress` module before using it.
+- **Generators keep memory low.** `parse_file` yields one entry at a time, so it can handle very large logs without loading them into memory.
+- **Distinct usernames add context.** One IP trying root, admin, test and oracle looks like guessing, not a typo, which makes the report more useful than a raw count.
+- **Debugging is checking one assumption at a time.** I hit a missing import, a relative-path error caused by the working directory, and an indentation bug that silently skipped code.
+- **Next steps:** count failures within a time window (like fail2ban), match more log patterns such as `Failed publickey`, and add JSON output.
